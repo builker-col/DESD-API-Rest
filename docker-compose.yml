@@ -73,8 +73,8 @@ services:
       RABBITMQ_PASS: password
       MONGO_URI: mongodb://root:example@mongodb:27017
       QUEUE_NAME: queue_cude
-      MODEL_ONNX_PATH: /models/cude_v2.onnx
-      MODEL_OPENVINO_PATH: /models/cude_v2.xml
+      MODEL_ONNX_PATH: /models/cude_v3.onnx
+      MODEL_OPENVINO_PATH: /models/cude_v3.xml
     volumes:
       - ./models/cude/:/models/
       - shared-data:/shared-data  # Montar el volumen compartido
@@ -93,8 +93,8 @@ services:
       RABBITMQ_PASS: password
       MONGO_URI: mongodb://root:example@mongodb:27017
       QUEUE_NAME: queue_rode
-      MODEL_ONNX_PATH: /models/rode_v2.onnx
-      MODEL_OPENVINO_PATH: /models/rode_v2.xml
+      MODEL_ONNX_PATH: /models/rode_v3.onnx
+      MODEL_OPENVINO_PATH: /models/rode_v3.xml
     volumes:
       - ./models/rode/:/models/
       - shared-data:/shared-data  # Montar el volumen compartido
@@ -113,8 +113,8 @@ services:
       RABBITMQ_PASS: password
       MONGO_URI: mongodb://root:example@mongodb:27017
       QUEUE_NAME: queue_legibility
-      MODEL_ONNX_PATH: /models/legibility_v1.onnx
-      MODEL_OPENVINO_PATH: /models/legibility_v1.xml
+      MODEL_ONNX_PATH: /models/legibility_v2.onnx
+      MODEL_OPENVINO_PATH: /models/legibility_v2.xml
     volumes:
       - ./models/legibility/:/models/
       - shared-data:/shared-data  # Montar el volumen compartido
@@ -133,8 +133,8 @@ services:
       RABBITMQ_PASS: password
       MONGO_URI: mongodb://root:example@mongodb:27017
       QUEUE_NAME: queue_tilde
-      MODEL_ONNX_PATH: /models/tilde_v1.onnx
-      MODEL_OPENVINO_PATH: /models/tilde_v1.xml
+      MODEL_ONNX_PATH: /models/tilde_v2.onnx
+      MODEL_OPENVINO_PATH: /models/tilde_v2.xml
     volumes:
       - ./models/tilde/:/models/
       - shared-data:/shared-data  # Montar el volumen compartido
