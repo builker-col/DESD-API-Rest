@@ -37,7 +37,7 @@ pymongo==4.11
 pyreadline3==3.5.4
 python-dotenv==1.0.1
 pytz==2025.1
-setuptools==75.8.0
+setuptools==78.1.1
 six==1.17.0
 SQLAlchemy==2.0.37
 sympy==1.13.3
