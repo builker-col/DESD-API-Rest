@@ -7,6 +7,27 @@ from app.schema import UserSchema
 from app import db
 
 class UserResource(Resource):
+    """
+    POST /api/v1/user
+      - Crea un usuario con validación de esquema.
+      - Auth: No requerido.
+      - Respuestas: 201 (usuario), 400 (validación).
+
+    GET /api/v1/user
+      - Obtiene el usuario autenticado.
+      - Auth: JWT requerido.
+      - Respuestas: 200 (usuario), 404 (no encontrado).
+
+    PUT /api/v1/user
+      - Actualiza parcialmente el usuario autenticado.
+      - Auth: JWT requerido.
+      - Respuestas: 200 (usuario), 400 (validación), 404 (no encontrado).
+
+    DELETE /api/v1/user
+      - Elimina el usuario autenticado.
+      - Auth: JWT requerido.
+      - Respuestas: 204, 404 (no encontrado).
+    """
     def post(self):
         user_schema = UserSchema()
         

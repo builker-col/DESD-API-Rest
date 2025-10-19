@@ -6,6 +6,11 @@ from app.schema import UserSchema
 from app import db
 
 class UserAdminResource(Resource):
+    """
+    Admin: /api/v1/admin/user
+    Operaciones CRUD sobre usuarios (requiere rol admin via JWT).
+    GET (opcional user_id), POST, PUT, DELETE
+    """
     @jwt_required()
     def get(self, user_id=None):        
         if not current_user.is_admin:

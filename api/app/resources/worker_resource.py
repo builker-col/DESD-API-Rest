@@ -29,6 +29,19 @@ class FileWithFilename:
         return self.file.close()
 
 class WorkerResource(Resource):
+    """
+    POST /api/v1/worker
+    Descripción: Sube uno o varios archivos (imágenes o documentos) y encola tareas de inferencia.
+    Auth: JWT requerido
+    Form-data:
+      - files: lista de archivos (imágenes o .zip)
+      - task_id (opcional): identificador de tarea; si no se envía, se genera.
+      - models (requerido): CSV con modelos válidos {rode,cude,tilde,legibility}
+    Respuestas:
+      - 202: { "task_id": string }
+      - 400: errores de parámetros/archivos
+      - 409: task_id ya existe
+    """
     @jwt_required()
     def post(self):
         if 'files' not in request.files:

@@ -1,0 +1,20 @@
+graph LR
+  subgraph API
+    A[/POST /api/v1/auth/]
+    B[/POST,GET,PUT,DELETE /api/v1/user/]
+    C[/POST /api/v1/worker/]
+    D[/POST /api/v1/duplicate/]
+    E[/GET /api/v1/task/]
+    F[/GET,DELETE /api/v1/task/:task_id/]
+    G[/GET /api/v1/export/:task_id/]
+    H[/GET,POST,PUT,DELETE /api/v1/admin/user/]
+    I[/GET,DELETE /api/v1/admin/task/]
+    J[/GET,POST,PUT,DELETE /api/v1/admin/allowed_ips/]
+  end
+
+  C -->|enqueue| Q1[(RabbitMQ: queue_rode/cude/tilde/legibility)]
+  D -->|enqueue| Q2[(RabbitMQ: queue_dude)]
+  G -->|read| MG[(MongoDB: results.<task_id>)]
+  E -->|read| PG[(PostgreSQL: result, result_status)]
+  F -->|read/write| PG
+

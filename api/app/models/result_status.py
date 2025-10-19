@@ -12,6 +12,10 @@ class ResultStatusEnum(enum.Enum):
     FAILED = 'FAILED'
     
 class ResultStatus(db.Model):
+    """Estado de una `Result`.
+
+    Guarda progreso, modelos aplicados y marca temporal de última actualización.
+    """
     __tablename__ = 'result_status'
     id = db.Column(db.Integer, primary_key=True)
     result_id = db.Column(db.Integer, db.ForeignKey('result.id'), nullable=False)

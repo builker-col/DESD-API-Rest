@@ -6,6 +6,11 @@ from app.schema import ResultSchema
 from app import db
 
 class TaskAdminResource(Resource):
+    """
+    Admin: /api/v1/admin/task
+    Gestión de tareas para administradores.
+    GET (opcional task_id), DELETE
+    """
     def __init__(self):
         self.result_schema = ResultSchema()
         

@@ -6,6 +6,11 @@ from app.schema import AllowedIPsSchema
 from app import db
 
 class AllowedIPsAdminResource(Resource):
+    """
+    Admin: /api/v1/admin/allowed_ips
+    Gestión de IPs permitidas para el acceso (JWT admin requerido).
+    GET (opcional allowed_ip_id), POST, PUT, DELETE
+    """
     def __init__(self):
         self.allowed_ips_schema = AllowedIPsSchema()
         

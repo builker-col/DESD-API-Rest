@@ -1,24 +1,28 @@
 syntax = "proto3";
 
-// Define el paquete del servicio
+// Paquete del servicio Converter
 package converter;
 
-// Define el servicio de conversión
+// Servicio de conversión de documentos a imágenes JPEG.
+//
+// - Soporta PDF y TIFF/TIF como entrada.
+// - Devuelve una lista de imágenes JPEG en memoria (bytes).
+// - El orden de las imágenes corresponde al orden de páginas del documento.
 service Converter {
-  // Define el método RPC para convertir archivos
+  // Convierte un archivo (file_content, file_name) en imágenes JPEG.
   rpc ConvertFile(ConvertRequest) returns (ConvertResponse);
 }
 
-// Define el mensaje de solicitud para la conversión
+// Solicitud de conversión
 message ConvertRequest {
-  // Contenido del archivo en bytes
+  // Contenido del archivo en bytes (PDF/TIFF)
   bytes file_content = 1;
-  // Nombre del archivo
+  // Nombre del archivo, usado para inferir el tipo (extensión)
   string file_name = 2;
 }
 
-// Define el mensaje de respuesta para la conversión
+// Respuesta con las imágenes resultantes
 message ConvertResponse {
-  // Lista de imágenes convertidas en bytes
+  // Lista de imágenes JPEG (bytes) en el orden de páginas
   repeated bytes images = 1;
 }

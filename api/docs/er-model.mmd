@@ -1,0 +1,22 @@
+erDiagram
+  RESULT ||--o{ RESULT_STATUS : has
+  RESULT {
+    int id PK
+    string collection_id "task_id usado en Mongo"
+    int user_id FK
+    datetime created_at
+    datetime updated_at
+  }
+  RESULT_STATUS {
+    int id PK
+    int result_id FK
+    enum status "UPLOADING|PENDING|RUNNING|COMPLETED|FAILED"
+    int total_files
+    int total_files_processed
+    string models
+    string current_file
+    datetime last_updated
+  }
+
+  %% Notación conceptual: MongoDB guarda documentos por colección `results.<task_id>`
+

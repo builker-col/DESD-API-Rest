@@ -4,7 +4,18 @@ from flask import request, abort
 from app.models import User
 
 class AuthResource(Resource):
+    """
+    POST /api/v1/auth
+    Descripción: Autentica credenciales y emite un token JWT para futuras solicitudes.
+    Auth: No requerido
+    Cuerpo (JSON): { "username": string, "password": string }
+    Respuestas:
+      - 200: { "access_token": string }
+      - 400: Username o password no proporcionado
+      - 401: Credenciales inválidas
+    """
     def post(self):
+        """Inicia sesión y devuelve un JWT (vigencia según la configuración)."""
         if 'username' not in request.json or 'password' not in request.json:
             abort(400, "Username or password not provided")
         

@@ -66,6 +66,8 @@ def postprocess(results):
         'no_rotated': 'no rotado',
         'cut': 'con corte de informacion',
         'no_cut': 'sin corte de informacion',
+        'unreadable': 'no legible',
+        'readable': 'legible',
     }
     
     # Traduce el nombre de la clase al español

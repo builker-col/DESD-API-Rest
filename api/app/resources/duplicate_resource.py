@@ -27,6 +27,18 @@ class FileWithFilename:
         return self.file.close()
 
 class DuplicateResource(Resource):
+    """
+    POST /api/v1/duplicate
+    Descripción: Procesa documentos para detección de páginas duplicadas y encola la tarea.
+    Auth: JWT requerido
+    Form-data:
+      - files: lista de documentos (pdf/tif/tiff) o .zip
+      - task_id (opcional): identificador de tarea; si no se envía, se genera.
+    Respuestas:
+      - 202: { "task_id": string }
+      - 400: errores de parámetros/archivos
+      - 409: task_id ya existe
+    """
     @jwt_required()
     def post(self):
         if 'files' not in request.files:

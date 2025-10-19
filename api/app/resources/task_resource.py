@@ -6,6 +6,17 @@ from app.schema import ResultSchema
 from app import db
 
 class TaskResource(Resource):
+    """
+    GET /api/v1/task
+      - Lista tareas del usuario autenticado con filtros opcionales (status, ordenamiento).
+      - Auth: JWT requerido.
+    GET /api/v1/task/<task_id>
+      - Obtiene detalle de la tarea por collection_id.
+      - Auth: JWT requerido.
+    DELETE /api/v1/task/<task_id>
+      - Elimina la tarea y su estado asociado (solo dueño).
+      - Auth: JWT requerido.
+    """
     @jwt_required()
     def get(self, task_id=None):
         result_schema = ResultSchema()

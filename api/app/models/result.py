@@ -3,6 +3,11 @@ import pytz
 from datetime import datetime
 
 class Result(db.Model):
+    """Registro de una tarea de procesamiento.
+
+    Almacena `collection_id` (task_id) para vincular con resultados en Mongo y su
+    relación 1:1 con `ResultStatus` para seguimiento del estado en PostgreSQL.
+    """
     __tablename__ = 'result'
     id = db.Column(db.Integer, primary_key=True)
     collection_id = db.Column(db.String(250), nullable=False, index=True)
