@@ -13,7 +13,7 @@ with app.app_context():
     db.create_all()
     
     users = [
-        User(username='admin', password=bcrypt.generate_password_hash('admin').decode('utf-8'), is_admin=True),
+        User(username='admin', password='admin', is_admin=True),
     ]
     
     db.session.add_all(users)
