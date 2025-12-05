@@ -20,7 +20,7 @@ services:
       - mongodb-data:/data/db
 
   postgres:
-    image: postgres
+    image: postgres:16
     ports:
       - "5432:5432"
     environment:
@@ -72,8 +72,8 @@ services:
       MONGO_URI: mongodb://root:example@mongodb:27017
       POSTGRES_URI: postgresql://user:password@postgres:5432/desd
       QUEUE_NAME: queue_cude
-      MODEL_ONNX_PATH: /models/cude_v3.onnx
-      MODEL_OPENVINO_PATH: /models/cude_v3.xml
+      MODEL_ONNX_PATH: /models/cude_v4.onnx
+      MODEL_OPENVINO_PATH: /models/cude_v4.xml
     volumes:
       - ./models/cude/:/models/
       - shared-data:/shared-data  # Montar el volumen compartido
