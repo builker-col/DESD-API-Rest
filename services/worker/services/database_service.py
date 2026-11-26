@@ -155,6 +155,49 @@ class DatabaseService:
 
             session.commit()
 
+    def record_failed_page(
+        self,
+        task_id: str,
+        failed_items: int,
+        current_file: str = '',
+        file_index: int = 0,
+    ) -> None:
+        """Avanza el contador atómico cuando una página va a DLQ para evitar que la tarea quede colgada en RUNNING."""
+        if failed_items <= 0 or self.SessionLocal is None:
+            return
+        now = datetime.now()
+        with self.SessionLocal() as session:
+            result_pk = self._get_result_pk(session, str(task_id))
+            if result_pk is None:
+                return
+            atomic_upd = text(
+                """
+                UPDATE result_status
+                SET total_items_processed = COALESCE(total_items_processed, 0) + :added,
+                    total_files_processed = GREATEST(COALESCE(total_files_processed, 0), :max_file_idx),
+                    current_file = COALESCE(NULLIF(:current_file, ''), current_file),
+                    status = CASE
+                        WHEN total_items_expected IS NOT NULL
+                             AND (COALESCE(total_items_processed, 0) + :added) >= total_items_expected
+                            THEN 'COMPLETED'::resultstatusenum
+                        ELSE 'RUNNING'::resultstatusenum
+                    END,
+                    last_updated = :now
+                WHERE result_id = :result_pk
+                """
+            )
+            session.execute(
+                atomic_upd,
+                {
+                    'added': failed_items,
+                    'max_file_idx': file_index or 0,
+                    'current_file': current_file or '',
+                    'now': now,
+                    'result_pk': result_pk,
+                },
+            )
+            session.commit()
+
     def close(self) -> None:
         try:
             if self.engine is not None:

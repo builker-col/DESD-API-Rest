@@ -87,6 +87,15 @@ func FilesStreaming(
 	taskSharedDir := filepath.Join(cfg.SharedDataDir, taskID)
 	_ = os.MkdirAll(taskSharedDir, 0o777)
 
+	// Archivo centinela mientras dura la ingesta: impide que os.rmdir() del worker
+	// borre taskSharedDir antes de que todos los archivos del lote terminen de convertirse.
+	sentinelPath := filepath.Join(taskSharedDir, ".ingesting")
+	_ = os.WriteFile(sentinelPath, []byte("1"), 0o666)
+	defer func() {
+		_ = os.Remove(sentinelPath)
+		_ = os.Remove(taskSharedDir) // Solo elimina si ya quedó vacío
+	}()
+
 	jobsCh := make(chan StagedInput, len(inputs))
 	for _, in := range inputs {
 		jobsCh <- in
@@ -231,13 +240,14 @@ func convertAndStreamOne(
 				FileIndex: fileIdx,
 			})
 		}
+		baseNoExt := strings.TrimSuffix(lowerName, filepath.Ext(lowerName))
 		pages, err := converter.ConvertDocumentStreaming(
 			ctx,
 			cfg.Converter,
 			srcPath,
 			lowerName,
 			taskSharedDir,
-			fmt.Sprintf("%s_%s_page", prefixID, lowerName),
+			fmt.Sprintf("%s_%s_page", prefixID, baseNoExt),
 			onPage,
 		)
 		if err != nil {

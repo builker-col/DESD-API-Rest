@@ -79,6 +79,15 @@ def _prefetch_loop() -> None:
         except Exception as exc:
             print(f"[prefetch] Error en {file_path}: {exc}", flush=True)
             _cleanup_file(file_path)
+            try:
+                database_service.record_failed_page(
+                    task_id=task.get('task_id', ''),
+                    failed_items=max(1, len(models)),
+                    current_file=task.get('filename', ''),
+                    file_index=task.get('file_index') or 0,
+                )
+            except Exception as db_exc:
+                print(f"[prefetch] Error actualizando contador tras fallo: {db_exc}", flush=True)
             messaging_service.nack_threadsafe(delivery_tag, requeue=False)
         finally:
             raw_queue.task_done()
@@ -106,6 +115,16 @@ def _inference_loop() -> None:
         except Exception as exc:
             print(f"[inference] Error en {task.get('file_path')}: {exc}", flush=True)
             _cleanup_file(task['file_path'])
+            try:
+                models_list = task.get('models') or ([task['model_name']] if 'model_name' in task else [])
+                database_service.record_failed_page(
+                    task_id=task.get('task_id', ''),
+                    failed_items=max(1, len(models_list)),
+                    current_file=task.get('filename', ''),
+                    file_index=task.get('file_index') or 0,
+                )
+            except Exception as db_exc:
+                print(f"[inference] Error actualizando contador tras fallo: {db_exc}", flush=True)
             messaging_service.nack_threadsafe(delivery_tag, requeue=False)
         finally:
             ready_queue.task_done()

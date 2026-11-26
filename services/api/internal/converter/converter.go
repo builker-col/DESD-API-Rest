@@ -248,11 +248,15 @@ func convertPDFStreaming(
 }
 
 func renderPDFRangeWithMutool(ctx context.Context, cfg config.ConverterConfig, pdfPath, outputDir, pagePrefix string, startPage, endPage int) ([]string, error) {
+	if err := os.MkdirAll(outputDir, 0o777); err != nil {
+		return nil, err
+	}
 	chunkTag := fmt.Sprintf("__m_%s_%d_%d", pagePrefix, startPage, endPage)
 	outPattern := filepath.Join(outputDir, chunkTag+"_%05d.jpg")
 	pageSpec := fmt.Sprintf("%d-%d", startPage, endPage)
 
-	args := []string{"draw", "-q"}
+	// -F png fuerza salida raster PNG incluso si el nombre del archivo contiene ".pdf"
+	args := []string{"draw", "-q", "-F", "png"}
 	if cfg.MaxDim > 0 {
 		dim := strconv.Itoa(cfg.MaxDim)
 		args = append(args, "-w", dim, "-h", dim)
@@ -276,6 +280,10 @@ func renderPDFRangeWithMutool(ctx context.Context, cfg config.ConverterConfig, p
 
 	finalPaths := make([]string, 0, len(matches))
 	for i, src := range matches {
+		if info, statErr := os.Stat(src); statErr != nil || info.Size() == 0 {
+			cleanupGlob(filepath.Join(outputDir, chunkTag+"_*.jpg"))
+			return nil, fmt.Errorf("mutool produjo imagen vacía en página %d", startPage+i)
+		}
 		dst := filepath.Join(outputDir, fmt.Sprintf("%s_%d.jpg", pagePrefix, startPage+i))
 		if err := os.Rename(src, dst); err != nil {
 			return nil, err
@@ -286,6 +294,9 @@ func renderPDFRangeWithMutool(ctx context.Context, cfg config.ConverterConfig, p
 }
 
 func renderPDFRangeWithPdftoppm(ctx context.Context, cfg config.ConverterConfig, pdfPath, outputDir, pagePrefix string, startPage, endPage int) ([]string, error) {
+	if err := os.MkdirAll(outputDir, 0o777); err != nil {
+		return nil, err
+	}
 	rawPrefix := filepath.Join(outputDir, fmt.Sprintf("__p_%s_%d_%d", pagePrefix, startPage, endPage))
 	jpegOpt := fmt.Sprintf("quality=%d,progressive=n,optimize=n", cfg.JPEGQuality)
 
