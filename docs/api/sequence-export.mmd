@@ -1,0 +1,16 @@
+sequenceDiagram
+  participant C as Cliente
+  participant API as services/api (Go)
+  participant PG as PostgreSQL 16
+
+  C->>API: GET /api/v1/export/{task_id}?formato=no_tecnico (Bearer JWT)
+  API->>PG: SELECT 1 FROM result_item WHERE task_id = $1 LIMIT 1
+  PG-->>API: Existe
+  API-->>C: HTTP 200 (Content-Type: text/csv, Content-Disposition: attachment)
+  API->>PG: Cursor streaming SELECT data FROM result_item WHERE task_id = $1 ORDER BY id ASC
+  loop Por cada fila (buffer 64 KB, memoria O(1))
+    PG-->>API: fila JSONB
+    API->>API: Filtra clases problemáticas y confianza >= 80%
+    API->>API: Etiqueta confianza (muy probable / probable / quizás con error)
+    API-->>C: Flush fragmento CSV
+  end

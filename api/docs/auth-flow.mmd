@@ -1,8 +1,0 @@
-flowchart TD
-  U[Usuario] -->|POST /api/v1/auth {username,password}| A[API]
-  A -->|Valida credenciales| DB[(Postgres: users)]
-  DB -->|OK| T[Genera JWT]
-  T -->|access_token| U
-  U -->|Authorization: Bearer <JWT>| P[Endpoints protegidos]
-  P -->|200/403/404| U
-

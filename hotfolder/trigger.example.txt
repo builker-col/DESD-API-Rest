@@ -1,0 +1,5 @@
+# Copia este archivo como trigger.txt dentro de hotfolder/inbox/ (o dentro de una subcarpeta de lote)
+models=cude,rode,legibility,tilde
+action=move
+destination=done
+export=both

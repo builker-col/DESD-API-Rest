@@ -1,6 +1,14 @@
 __pycache__/
+**/__pycache__/
 .venv/
+**/.venv/
+.git/
 .gitignore
 docs/
+notebooks/
+hotfolder/
+DESD-API-REST.zip
+._*
+**/._*
 *.pyc
 *.pyo

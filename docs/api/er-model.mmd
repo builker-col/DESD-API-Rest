@@ -1,0 +1,51 @@
+erDiagram
+  USER ||--o{ RESULT : owns
+  RESULT ||--|| RESULT_STATUS : tracks
+  RESULT ||--o{ RESULT_ITEM : contains
+
+  USER {
+    int id PK
+    varchar username UK
+    varchar password "bcrypt hash"
+    boolean is_admin
+    boolean is_active
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  ALLOWED_IPS {
+    int id PK
+    varchar ip UK "IP exacta o CIDR"
+    boolean is_active
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  RESULT {
+    int id PK
+    varchar collection_id "task_id indexado"
+    int user_id FK
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  RESULT_STATUS {
+    int id PK
+    int result_id FK
+    resultstatusenum status "UPLOADING|PENDING|RUNNING|COMPLETED|FAILED"
+    int total_files
+    int total_files_processed
+    int total_items_expected "NULL durante streaming"
+    int total_items_processed "contador atomico"
+    varchar models
+    varchar current_file
+    timestamp last_updated
+  }
+
+  RESULT_ITEM {
+    int id PK
+    int result_id FK "ON DELETE CASCADE"
+    varchar task_id "indexado"
+    jsonb data "resultado de inferencia o duplicados"
+    timestamp created_at
+  }

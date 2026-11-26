@@ -1,0 +1,32 @@
+graph LR
+  subgraph API["services/api (Go 1.23)"]
+    H["GET /health"]
+    A["POST /api/v1/auth"]
+    B["POST/GET/PUT/DELETE /api/v1/user"]
+    C["POST /api/v1/worker"]
+    D["POST /api/v1/duplicate"]
+    E["GET /api/v1/task"]
+    F["GET/DELETE /api/v1/task/:task_id"]
+    G["GET /api/v1/export/:task_id"]
+    AD["Admin: /api/v1/admin/{user,task,allowed_ips}"]
+    HF["Hot-Folder Watcher (/hotfolder/inbox)"]
+  end
+
+  TMP[("/shared-data (tmpfs 2GB)")]
+  Q1[("RabbitMQ: queue_worker + DLQ")]
+  Q2[("RabbitMQ: queue_dude + DLQ")]
+  PG[("PostgreSQL 16: user, allowed_ips, result, result_status, result_item")]
+
+  C -->|"pdfimages / mutool / vips"| TMP
+  D -->|"pdfimages / mutool / vips"| TMP
+  HF -->|"pdfimages / mutool / vips"| TMP
+  C -->|"streaming"| Q1
+  HF -->|"streaming"| Q1
+  D --> Q2
+  HF --> Q2
+  G -->|"streaming CSV (pgx)"| PG
+  E --> PG
+  F --> PG
+  AD --> PG
+  H --> PG
+  H --> Q1

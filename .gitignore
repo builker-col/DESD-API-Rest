@@ -302,3 +302,14 @@ temp/*/*.pdf
 app/ai_models/customTrOCR/
 
 app/tests/*.http
+
+# macOS metadata files
+._*
+.DS_Store
+
+# Hot-folder runtime data
+hotfolder/inbox/
+hotfolder/processing/
+hotfolder/done/
+hotfolder/failed/
+hotfolder/results/

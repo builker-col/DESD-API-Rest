@@ -1,173 +1,138 @@
-version: '3'
 services:
   rabbitmq:
     image: rabbitmq:3-management
+    restart: unless-stopped
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: user
-      RABBITMQ_DEFAULT_PASS: password
-
-  mongodb:
-    image: mongo
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: example
-    volumes:
-      - mongodb-data:/data/db
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-password}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   postgres:
     image: postgres:16
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: desd
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-desd}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-desd}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   api:
     build:
-      context: .
-      dockerfile: Dockerfile.api
+      context: ./services/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "${API_PORT:-5000}:5000"
     environment:
-      FLASK_ENV: development
+      API_LISTEN_ADDR: ":5000"
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: user
-      RABBITMQ_PASS: password
-      MONGO_URI: mongodb://root:example@mongodb:27017
-      SQLALCHEMY_DATABASE_URI: postgresql://user:password@postgres:5432/desd
-      CONVERTER_GRPC_HOST: converter:50051
-      FLASK_SECRET_KEY: 4be374c60625b60ad3b571364d925c8a1191b4614844eb5137acd4b24275fa29
-      JWT_SECRET_KEY: e52a1f926d451902e2a60d5e5bfe0a6667294b76f1585e86394d670cf8ac27fc
+      RABBITMQ_USER: ${RABBITMQ_USER:-user}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-password}
+      RABBITMQ_DLX: ${RABBITMQ_DLX:-desd.dlx}
+      POSTGRES_URI: postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-desd}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-jwt_secret_key}
+      CONVERTER_DPI: ${CONVERTER_DPI:-150}
+      CONVERTER_MAX_DIM: ${CONVERTER_MAX_DIM:-960}
+      CONVERTER_JPEG_QUALITY: ${CONVERTER_JPEG_QUALITY:-85}
+      CONVERTER_FAST_PDFIMAGES: ${CONVERTER_FAST_PDFIMAGES:-1}
+      CONVERTER_PDF_CHUNK_SIZE: ${CONVERTER_PDF_CHUNK_SIZE:-8}
+      INGEST_CONCURRENCY: ${INGEST_CONCURRENCY:-4}
+      WORKER_QUEUE_NAME: ${WORKER_QUEUE_NAME:-queue_worker}
+      DUPLICATE_QUEUE_NAME: ${DUPLICATE_QUEUE_NAME:-queue_dude}
+      SHARED_DATA_DIR: /shared-data
+      HOTFOLDER_ENABLED: ${HOTFOLDER_ENABLED:-true}
+      HOTFOLDER_ROOT: /hotfolder
+      HOTFOLDER_POLL_INTERVAL: ${HOTFOLDER_POLL_INTERVAL:-0.5}
+      HOTFOLDER_DEFAULT_USER: ${HOTFOLDER_DEFAULT_USER:-admin}
     volumes:
-      - shared-data:/shared-data  # Montar el volumen compartido
+      - shared-data:/shared-data
+      - ./hotfolder:/hotfolder
     depends_on:
-      - rabbitmq
-      - mongodb
-      - postgres
-      - converter
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/desd-api", "-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  converter:
+  worker:
     build:
-      context: .
-      dockerfile: Dockerfile.converter
-    ports:
-      - "50051:50051"
-
-  worker_cude:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+      context: ./services/worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: user
-      RABBITMQ_PASS: password
-      MONGO_URI: mongodb://root:example@mongodb:27017
-      POSTGRES_URI: postgresql://user:password@postgres:5432/desd
-      QUEUE_NAME: queue_cude
-      MODEL_ONNX_PATH: /models/cude_v4.onnx
-      MODEL_OPENVINO_PATH: /models/cude_v4.xml
+      RABBITMQ_USER: ${RABBITMQ_USER:-user}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-password}
+      RABBITMQ_DLX: ${RABBITMQ_DLX:-desd.dlx}
+      RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH:-8}
+      POSTGRES_URI: postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-desd}
+      QUEUE_NAME: ${WORKER_QUEUE_NAME:-queue_worker}
+      MODELS_DIR: /models
+      ENABLED_MODELS: ${ENABLED_MODELS:-cude,rode,legibility,tilde}
+      WORKER_PREFETCH_THREADS: ${WORKER_PREFETCH_THREADS:-2}
+      WORKER_DB_BATCH_SIZE: ${WORKER_DB_BATCH_SIZE:-8}
+      WORKER_DB_FLUSH_WINDOW_MS: ${WORKER_DB_FLUSH_WINDOW_MS:-15}
     volumes:
-      - ./models/cude/:/models/
-      - shared-data:/shared-data  # Montar el volumen compartido
+      - ./models:/models:ro
+      - shared-data:/shared-data
     depends_on:
-      - rabbitmq
-      - mongodb
-      - postgres
-      - api
-
-  worker_rode:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    environment:
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: user
-      RABBITMQ_PASS: password
-      MONGO_URI: mongodb://root:example@mongodb:27017
-      POSTGRES_URI: postgresql://user:password@postgres:5432/desd
-      QUEUE_NAME: queue_rode
-      MODEL_ONNX_PATH: /models/rode_v3.onnx
-      MODEL_OPENVINO_PATH: /models/rode_v3.xml
-    volumes:
-      - ./models/rode/:/models/
-      - shared-data:/shared-data  # Montar el volumen compartido
-    depends_on:
-      - rabbitmq
-      - mongodb
-      - postgres
-      - api
-
-  worker_legibility:
-    build: 
-      context: .
-      dockerfile: Dockerfile.worker
-    environment:
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: user
-      RABBITMQ_PASS: password
-      MONGO_URI: mongodb://root:example@mongodb:27017
-      POSTGRES_URI: postgresql://user:password@postgres:5432/desd
-      QUEUE_NAME: queue_legibility
-      MODEL_ONNX_PATH: /models/legibility_v2.onnx
-      MODEL_OPENVINO_PATH: /models/legibility_v2.xml
-    volumes:
-      - ./models/legibility/:/models/
-      - shared-data:/shared-data  # Montar el volumen compartido
-    depends_on:
-      - rabbitmq
-      - mongodb
-      - postgres
-      - api
-
-  worker_tilde:
-    build: 
-      context: .
-      dockerfile: Dockerfile.worker
-    environment:
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: user
-      RABBITMQ_PASS: password
-      MONGO_URI: mongodb://root:example@mongodb:27017
-      POSTGRES_URI: postgresql://user:password@postgres:5432/desd
-      QUEUE_NAME: queue_tilde
-      MODEL_ONNX_PATH: /models/tilde_v2.onnx
-      MODEL_OPENVINO_PATH: /models/tilde_v2.xml
-    volumes:
-      - ./models/tilde/:/models/
-      - shared-data:/shared-data  # Montar el volumen compartido
-    depends_on:
-      - rabbitmq
-      - mongodb
-      - postgres
-      - api
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_healthy
 
   duplicate:
-    build: 
-      context: .
-      dockerfile: Dockerfile.duplicate
+    build:
+      context: ./services/duplicate
+      dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: user
-      RABBITMQ_PASS: password
-      MONGO_URI: mongodb://root:example@mongodb:27017
-      POSTGRES_URI: postgresql://user:password@postgres:5432/desd
-      QUEUE_NAME: queue_dude
+      RABBITMQ_USER: ${RABBITMQ_USER:-user}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-password}
+      RABBITMQ_DLX: ${RABBITMQ_DLX:-desd.dlx}
+      POSTGRES_URI: postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-desd}
+      QUEUE_NAME: ${DUPLICATE_QUEUE_NAME:-queue_dude}
+      DUPLICATE_SSIM_MAX_DIM: ${DUPLICATE_SSIM_MAX_DIM:-512}
     volumes:
-      - shared-data:/shared-data  # Montar el volumen compartido
+      - shared-data:/shared-data
     depends_on:
-      - rabbitmq
-      - mongodb
-      - postgres
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_healthy
 
 volumes:
   shared-data:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=2g,mode=1777"
   postgres-data:
-  mongodb-data:

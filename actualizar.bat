@@ -80,7 +80,6 @@ echo.
 echo Los servicios estan disponibles en:
 echo - API: http://localhost:5000
 echo - RabbitMQ Management: http://localhost:15672
-echo - MongoDB: localhost:27017
 echo - PostgreSQL: localhost:5432
 echo.
 echo Para ver los logs en tiempo real ejecuta:

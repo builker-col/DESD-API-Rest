@@ -1,0 +1,24 @@
+sequenceDiagram
+  participant C as Cliente
+  participant API as API (Go · services/api)
+  participant CACHE as Caché CIDR (RAM 15s)
+  participant PG as PostgreSQL 16
+
+  C->>API: POST /api/v1/auth {username, password}
+  API->>CACHE: IsIPAllowed(client_ip)
+  alt Cache miss
+    CACHE->>PG: SELECT ip FROM allowed_ips WHERE is_active = TRUE
+    PG-->>CACHE: Lista IPs / CIDR
+  end
+  API->>PG: SELECT * FROM "user" WHERE username = $1
+  PG-->>API: User (hash bcrypt)
+  API->>API: bcrypt.CompareHashAndPassword
+  API->>API: Firma JWT HS256 (sub=user.id, exp=24h)
+  API-->>C: 200 {access_token}
+
+  C->>API: GET /api/v1/task (Authorization: Bearer JWT)
+  API->>CACHE: IsIPAllowed(client_ip)
+  API->>API: Valida firma HS256 y expiración
+  API->>PG: SELECT user + tasks WHERE user_id = sub
+  PG-->>API: Registros
+  API-->>C: 200 {total_results, results}
