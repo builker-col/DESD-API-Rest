@@ -80,6 +80,7 @@ func (s *Server) withCORSAndIP(next http.Handler) http.Handler {
 		clientIP := extractClientIP(r)
 		allowed, err := s.store.IsIPAllowed(r.Context(), clientIP)
 		if err != nil || !allowed {
+			fmt.Printf("[api] Acceso bloqueado para IP '%s' (%s %s)\n", clientIP, r.Method, r.URL.Path)
 			writeJSONError(w, http.StatusForbidden, "Acceso denegado: IP no permitida.")
 			return
 		}

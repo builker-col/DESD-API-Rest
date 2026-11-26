@@ -183,16 +183,12 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 		}
 	}
 
-	var ipCount int
-	if err := s.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM allowed_ips`).Scan(&ipCount); err == nil && ipCount == 0 {
-		for _, ip := range []string{"127.0.0.1", "::1", "172.16.0.0/12", "192.168.0.0/16"} {
-			_, _ = s.Pool.Exec(ctx, `
-				INSERT INTO allowed_ips (ip, is_active, created_at, updated_at)
-				VALUES ($1, TRUE, NOW(), NOW())
-				ON CONFLICT (ip) DO NOTHING
-			`, ip)
-		}
-		fmt.Println("[api] IPs locales permitidas sembradas automáticamente.")
+	for _, ip := range []string{"127.0.0.1", "::1", "172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"} {
+		_, _ = s.Pool.Exec(ctx, `
+			INSERT INTO allowed_ips (ip, is_active, created_at, updated_at)
+			VALUES ($1, TRUE, NOW(), NOW())
+			ON CONFLICT (ip) DO NOTHING
+		`, ip)
 	}
 
 	return nil
