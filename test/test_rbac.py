@@ -355,7 +355,41 @@ def main() -> int:
         _, rows = parse_xlsx_sheet1_rows(raw_xlsx)
         assert_eq({r[2] for r in rows[1:]}, {t_u1, t_u2}, "Excel filtrado por user_ids=u1,u2 contiene solo t_u1 y t_u2")
 
-        print("\nTODAS LAS PRUEBAS E2E DE USUARIOS, ROLES Y REPORTE EXCEL PASARON EXITOSAMENTE.")
+        # 12. Pruebas de cambio de contraseña (propia y por admin)
+        code, _ = request_json(
+            "PUT", "/api/v1/user/password", token=u1_token,
+            payload={"current_password": "wrong", "new_password": "new_u1_pass"},
+        )
+        assert_eq(code, 401, "Usuario con current_password incorrecta es rechazado (401)")
+
+        code, _ = request_json(
+            "PUT", "/api/v1/user/password", token=u1_token,
+            payload={"current_password": "secret", "new_password": "new_u1_pass"},
+        )
+        assert_eq(code, 200, "Usuario cambia su propia contraseña (200)")
+
+        code, _ = request_json("POST", "/api/v1/auth", payload={"username": u1_name, "password": "secret"})
+        assert_eq(code, 401, "Login con contraseña anterior de u1 falla (401)")
+
+        code, _ = request_json("POST", "/api/v1/auth", payload={"username": u1_name, "password": "new_u1_pass"})
+        assert_eq(code, 200, "Login con nueva contraseña de u1 funciona (200)")
+
+        code, _ = request_json(
+            "PUT", f"/api/v1/admin/user/{u2['id']}/password", token=u1_token,
+            payload={"new_password": "hacked"},
+        )
+        assert_eq(code, 403, "Usuario no admin NO puede cambiar contraseña de otro usuario (403)")
+
+        code, _ = request_json(
+            "PUT", f"/api/v1/admin/user/{u2['id']}/password", token=admin_token,
+            payload={"new_password": "admin_reset_pass"},
+        )
+        assert_eq(code, 200, "Admin cambia contraseña de u2 (200)")
+
+        code, _ = request_json("POST", "/api/v1/auth", payload={"username": u2_name, "password": "admin_reset_pass"})
+        assert_eq(code, 200, "u2 inicia sesión con contraseña restablecida por admin (200)")
+
+        print("\nTODAS LAS PRUEBAS E2E DE USUARIOS, ROLES, CONTRASEÑAS Y REPORTE EXCEL PASARON EXITOSAMENTE.")
         return 0
     finally:
         if admin_token:

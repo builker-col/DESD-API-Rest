@@ -43,6 +43,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/user", s.handleUserCreate)
 	mux.HandleFunc("GET /api/v1/user", s.requireAuth(s.handleUserGet))
 	mux.HandleFunc("PUT /api/v1/user", s.requireAuth(s.handleUserUpdate))
+	mux.HandleFunc("PUT /api/v1/user/password", s.requireAuth(s.handleUserChangePassword))
 	mux.HandleFunc("DELETE /api/v1/user", s.requireAuth(s.handleUserDelete))
 
 	// Worker & Duplicate
@@ -68,6 +69,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/admin/user/{user_id}", s.requireAdmin(s.handleAdminUserGet))
 	mux.HandleFunc("POST /api/v1/admin/user", s.requireAdmin(s.handleAdminUserCreate))
 	mux.HandleFunc("PUT /api/v1/admin/user/{user_id}", s.requireAdmin(s.handleAdminUserUpdate))
+	mux.HandleFunc("PUT /api/v1/admin/user/{user_id}/password", s.requireAdmin(s.handleAdminUserChangePassword))
 	mux.HandleFunc("DELETE /api/v1/admin/user/{user_id}", s.requireAdmin(s.handleAdminUserDelete))
 
 	// Admin: Encargado <-> Users assignments
@@ -210,6 +212,32 @@ func (s *Server) handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) handleUserChangePassword(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if body.CurrentPassword == "" || body.NewPassword == "" {
+		writeJSONError(w, http.StatusBadRequest, "current_password and new_password are required")
+		return
+	}
+	user := currentUser(r)
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.CurrentPassword)); err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Current password is incorrect")
+		return
+	}
+	ok, err := s.store.UpdateUserPassword(r.Context(), user.ID, body.NewPassword)
+	if err != nil || !ok {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to update password")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Password updated successfully"})
 }
 
 func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
@@ -953,6 +981,40 @@ func (s *Server) handleAdminUserUpdate(w http.ResponseWriter, r *http.Request) {
 		u.AssignedUserIDs = ids
 	}
 	writeJSON(w, http.StatusOK, u)
+}
+
+func (s *Server) handleAdminUserChangePassword(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("user_id"))
+	if err != nil || id <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "Invalid user_id")
+		return
+	}
+	var body struct {
+		NewPassword string `json:"new_password"`
+		Password    string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	newPass := body.NewPassword
+	if newPass == "" {
+		newPass = body.Password
+	}
+	if newPass == "" {
+		writeJSONError(w, http.StatusBadRequest, "new_password is required")
+		return
+	}
+	ok, err := s.store.UpdateUserPassword(r.Context(), id, newPass)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeJSONError(w, http.StatusNotFound, "User not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Password updated successfully"})
 }
 
 func (s *Server) handleAdminUserDelete(w http.ResponseWriter, r *http.Request) {

@@ -53,6 +53,7 @@ Todos los errores responden JSON consistente: `{ "message": "<descripción>" }`.
 | `POST` | `/api/v1/auth` | No | Autenticación y emisión de JWT |
 | `POST` | `/api/v1/user` | No | Registro de nuevo usuario (no admin) |
 | `GET` / `PUT` / `DELETE` | `/api/v1/user` | JWT | Consultar, actualizar o eliminar el usuario autenticado |
+| `PUT` | `/api/v1/user/password` | JWT | Cambiar la propia contraseña (valida `current_password`) |
 | `POST` | `/api/v1/worker` | JWT | Sube archivos y encola inferencia multi-modelo |
 | `POST` | `/api/v1/duplicate` | JWT | Sube documentos y encola detección de páginas duplicadas |
 | `GET` | `/api/v1/task` | JWT | Lista tareas visibles según rol (`user`: propias, `encargado`: propias + asignados, `admin`: todas) |
@@ -61,6 +62,7 @@ Todos los errores responden JSON consistente: `{ "message": "<descripción>" }`.
 | `GET` | `/api/v1/report/excel` | JWT (`admin` / `encargado`) | Descarga reporte Excel (`.xlsx`) de archivos procesados y resumen por usuario |
 | `GET` | `/api/v1/encargado/users` | JWT (`encargado` / `admin`) | Lista los usuarios asignados al encargado autenticado |
 | `GET` / `POST` / `PUT` / `DELETE` | `/api/v1/admin/user[/{user_id}]` | JWT (`admin`) | Administración completa de usuarios y roles (`admin`, `encargado`, `user`) |
+| `PUT` | `/api/v1/admin/user/{user_id}/password` | JWT (`admin`) | Restablecer la contraseña de cualquier usuario (`new_password`) |
 | `GET` / `PUT` | `/api/v1/admin/encargado/{encargado_id}/users` | JWT (`admin`) | Lista o reemplaza los usuarios asignados a un `encargado` |
 | `POST` / `DELETE` | `/api/v1/admin/encargado/{encargado_id}/users/{user_id}` | JWT (`admin`) | Asigna o desasigna un usuario específico a un `encargado` |
 | `GET` / `DELETE` | `/api/v1/admin/task[/{task_id}]` | JWT (`admin`) | Administración global de tareas |
@@ -254,7 +256,10 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   - `GET /api/v1/admin/user/{user_id}`
   - `POST /api/v1/admin/user` — body: `{ "username": "...", "password": "...", "role": "encargado", "is_active": true, "assigned_user_ids": [2, 3] }`
   - `PUT /api/v1/admin/user/{user_id}` — permite actualizar `username`, `password`, `role`, `is_active` y `assigned_user_ids`
+  - `PUT /api/v1/admin/user/{user_id}/password` — restablece contraseña de cualquier usuario: `{ "new_password": "..." }`
   - `DELETE /api/v1/admin/user/{user_id}`
+- **Cambio de contraseña propia (cualquier rol autenticado):**
+  - `PUT /api/v1/user/password` — body: `{ "current_password": "...", "new_password": "..." }` (valida contraseña actual)
 - **Asignación de usuarios a encargados:**
   - `GET /api/v1/admin/encargado/{encargado_id}/users` — lista los usuarios asignados a ese encargado
   - `PUT /api/v1/admin/encargado/{encargado_id}/users` — reemplaza la lista completa con `{ "user_ids": [2, 3, 4] }`

@@ -574,6 +574,19 @@ func (s *Store) UpdateUser(ctx context.Context, id int, username, rawPassword, r
 	return existing, nil
 }
 
+func (s *Store) UpdateUserPassword(ctx context.Context, id int, rawPassword string) (bool, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(rawPassword), 10)
+	if err != nil {
+		return false, err
+	}
+	tag, err := s.Pool.Exec(ctx, `
+		UPDATE "user"
+		SET password = $1, updated_at = $2
+		WHERE id = $3
+	`, string(hash), time.Now(), id)
+	return tag.RowsAffected() > 0, err
+}
+
 func (s *Store) DeleteUser(ctx context.Context, id int) (bool, error) {
 	tag, err := s.Pool.Exec(ctx, `DELETE FROM "user" WHERE id = $1`, id)
 	return tag.RowsAffected() > 0, err
