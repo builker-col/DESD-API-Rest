@@ -1,16 +1,26 @@
 erDiagram
   USER ||--o{ RESULT : owns
+  USER ||--o{ ENCARGADO_USERS : supervises
+  USER ||--o{ ENCARGADO_USERS : assigned_to
   RESULT ||--|| RESULT_STATUS : tracks
+  RESULT ||--o{ RESULT_FILE : registers
   RESULT ||--o{ RESULT_ITEM : contains
 
   USER {
     int id PK
     varchar username UK
     varchar password "bcrypt hash"
+    varchar role "admin|encargado|user"
     boolean is_admin
     boolean is_active
     timestamp created_at
     timestamp updated_at
+  }
+
+  ENCARGADO_USERS {
+    int encargado_id PK,FK "ON DELETE CASCADE"
+    int user_id PK,FK "ON DELETE CASCADE"
+    timestamp created_at
   }
 
   ALLOWED_IPS {
@@ -40,6 +50,18 @@ erDiagram
     varchar models
     varchar current_file
     timestamp last_updated
+  }
+
+  RESULT_FILE {
+    int id PK
+    int result_id FK "ON DELETE CASCADE"
+    varchar task_id "indexado"
+    varchar filename
+    text file_path "ruta origen o destino"
+    varchar source "api|hotfolder"
+    int pages
+    bigint size_bytes
+    timestamp created_at
   }
 
   RESULT_ITEM {

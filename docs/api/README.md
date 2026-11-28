@@ -12,10 +12,20 @@ Todas las rutas (excepto `GET /health` y `OPTIONS`) validan la IP del cliente co
 - Si hay proxy inverso, toma la primera IP de la cabecera `X-Forwarded-For`.
 - Si la IP no está autorizada, responde `403 Forbidden`.
 
-### 2. Autenticación JWT (HS256)
+### 2. Autenticación JWT (HS256) y Roles (RBAC)
 - Obtener token: `POST /api/v1/auth` con `{ "username": "...", "password": "..." }`.
 - Vigencia del token: **24 horas** (`sub` = ID numérico del usuario en string).
 - Uso en rutas protegidas: cabecera `Authorization: Bearer <access_token>`.
+- Usuarios con `is_active = false` son rechazados tanto en login como en cualquier ruta protegida (`403 Forbidden`).
+
+#### Roles y visibilidad de procesamientos
+| Rol | Visibilidad de tareas y exportación CSV | Gestión |
+|---|---|---|
+| `user` | Solo sus propios procesamientos | Perfil propio y eliminación de sus propias tareas |
+| `encargado` | Sus propios procesamientos **y** los de los usuarios que tenga asignados (`encargado_users`) | Puede consultar su lista de usuarios a cargo (`GET /api/v1/encargado/users`) y filtrar `GET /api/v1/task?user_id=...` dentro de su alcance |
+| `admin` | **Todos** los procesamientos y archivos del sistema | Administración total de usuarios, roles, asignaciones de encargados, tareas e IPs permitidas |
+
+> El campo booleano `is_admin` se mantiene sincronizado automáticamente con `role == "admin"` para compatibilidad retroactiva.
 
 ### 3. Códigos de estado HTTP y formato de error
 Todos los errores responden JSON consistente: `{ "message": "<descripción>" }`.
@@ -45,12 +55,16 @@ Todos los errores responden JSON consistente: `{ "message": "<descripción>" }`.
 | `GET` / `PUT` / `DELETE` | `/api/v1/user` | JWT | Consultar, actualizar o eliminar el usuario autenticado |
 | `POST` | `/api/v1/worker` | JWT | Sube archivos y encola inferencia multi-modelo |
 | `POST` | `/api/v1/duplicate` | JWT | Sube documentos y encola detección de páginas duplicadas |
-| `GET` | `/api/v1/task` | JWT | Lista tareas del usuario autenticado (con filtros y orden) |
-| `GET` / `DELETE` | `/api/v1/task/{task_id}` | JWT | Consulta detalle o elimina una tarea (y sus resultados) |
-| `GET` | `/api/v1/export/{task_id}` | JWT | Exporta resultados en streaming CSV (`normal` \| `no_tecnico`) |
-| `GET` / `POST` / `PUT` / `DELETE` | `/api/v1/admin/user[/{user_id}]` | JWT (Admin) | Administración completa de usuarios |
-| `GET` / `DELETE` | `/api/v1/admin/task[/{task_id}]` | JWT (Admin) | Administración global de tareas |
-| `GET` / `POST` / `PUT` / `DELETE` | `/api/v1/admin/allowed_ips[/{id}]` | JWT (Admin) | Gestión de IPs y rangos CIDR permitidos |
+| `GET` | `/api/v1/task` | JWT | Lista tareas visibles según rol (`user`: propias, `encargado`: propias + asignados, `admin`: todas) |
+| `GET` / `DELETE` | `/api/v1/task/{task_id}` | JWT | Consulta detalle (según rol) o elimina una tarea (propietario o `admin`) |
+| `GET` | `/api/v1/export/{task_id}` | JWT | Exporta resultados en streaming CSV (según permisos del rol) |
+| `GET` | `/api/v1/report/excel` | JWT (`admin` / `encargado`) | Descarga reporte Excel (`.xlsx`) de archivos procesados y resumen por usuario |
+| `GET` | `/api/v1/encargado/users` | JWT (`encargado` / `admin`) | Lista los usuarios asignados al encargado autenticado |
+| `GET` / `POST` / `PUT` / `DELETE` | `/api/v1/admin/user[/{user_id}]` | JWT (`admin`) | Administración completa de usuarios y roles (`admin`, `encargado`, `user`) |
+| `GET` / `PUT` | `/api/v1/admin/encargado/{encargado_id}/users` | JWT (`admin`) | Lista o reemplaza los usuarios asignados a un `encargado` |
+| `POST` / `DELETE` | `/api/v1/admin/encargado/{encargado_id}/users/{user_id}` | JWT (`admin`) | Asigna o desasigna un usuario específico a un `encargado` |
+| `GET` / `DELETE` | `/api/v1/admin/task[/{task_id}]` | JWT (`admin`) | Administración global de tareas |
+| `GET` / `POST` / `PUT` / `DELETE` | `/api/v1/admin/allowed_ips[/{id}]` | JWT (`admin`) | Gestión de IPs y rangos CIDR permitidos |
 
 ---
 
@@ -77,7 +91,15 @@ Verifica conectividad activa contra PostgreSQL y RabbitMQ.
 - **Respuesta `200 OK`:**
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIs..."
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "role": "admin",
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "role": "admin",
+    "is_admin": true,
+    "is_active": true
+  }
 }
 ```
 
@@ -92,6 +114,7 @@ Convierte documentos en paralelo directo a `/shared-data` (`tmpfs`) y publica en
   - `files` *(requerido, repetible)*: imágenes (`jpg`, `jpeg`, `png`), documentos (`pdf`, `tif`, `tiff`) o un `.zip`.
   - `models` *(requerido)*: lista CSV de modelos válidos `{cude, rode, tilde, legibility}`.
   - `task_id` *(opcional)*: identificador único; si se omite se genera automáticamente.
+  - `source_path` *(opcional)*: prefijo de ruta de origen para registrar en `result_file` y mostrar en el reporte Excel.
 - **Respuesta `202 Accepted`:**
 ```json
 {
@@ -114,6 +137,7 @@ Convierte documentos PDF/TIFF y encola detección de páginas duplicadas (`queue
 - **Campos:**
   - `files` *(requerido, repetible)*: documentos (`pdf`, `tif`, `tiff`) o un `.zip`.
   - `task_id` *(opcional)*: identificador único.
+  - `source_path` *(opcional)*: prefijo de ruta de origen para el reporte Excel.
 - **Respuesta `202 Accepted`:** `{ "task_id": "..." }`
 
 ---
@@ -121,8 +145,13 @@ Convierte documentos PDF/TIFF y encola detección de páginas duplicadas (`queue
 ### Seguimiento y gestión de tareas
 
 #### `GET /api/v1/task`
-Lista las tareas del usuario autenticado.
+Lista las tareas visibles según el rol del usuario autenticado:
+- **`user`:** solo sus propias tareas.
+- **`encargado`:** sus propias tareas + las de los usuarios asignados a su cargo.
+- **`admin`:** todas las tareas del sistema.
+
 - **Query params opcionales:**
+  - `user_id`: filtra por un usuario específico (`admin` puede filtrar por cualquiera; `encargado` solo por sí mismo o sus usuarios asignados; `user` solo por sí mismo).
   - `status`: `UPLOADING` | `PENDING` | `RUNNING` | `COMPLETED` | `FAILED`
   - `order_type`: `created_at` *(defecto)* | `updated_at` | `id` | `collection_id`
   - `order_by`: `desc` *(defecto)* | `asc`
@@ -135,6 +164,7 @@ Lista las tareas del usuario autenticado.
       "id": 12,
       "collection_id": "lote_2026_01",
       "user_id": 1,
+      "username": "admin",
       "created_at": "2026-11-26T00:10:00Z",
       "updated_at": "2026-11-26T00:10:00Z",
       "status": {
@@ -190,10 +220,47 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ---
 
-### Administración (requiere `is_admin = true`)
+### Reporte Excel de archivos procesados
 
-- **Usuarios:** `GET /api/v1/admin/user`, `GET /api/v1/admin/user/{user_id}`, `POST /api/v1/admin/user`, `PUT /api/v1/admin/user/{user_id}`, `DELETE /api/v1/admin/user/{user_id}`
-- **Tareas globales:** `GET /api/v1/admin/task`, `GET /api/v1/admin/task/{task_id}`, `DELETE /api/v1/admin/task/{task_id}`
+#### `GET /api/v1/report/excel` *(roles `admin` y `encargado`)*
+Genera y descarga un libro Excel (`.xlsx`) con dos hojas:
+1. **`Archivos Procesados`**: `Usuario`, `Rol`, `Task ID`, `Nombre de Archivo`, `Ruta`, `Fecha`, `Hora`, `Origen` (`api` / `hotfolder`), `Modelos`, `Páginas`, `Tamaño (KB)`, `Estado Tarea`, `Hallazgos / Alertas`.
+2. **`Resumen por Usuario`**: totales agrupados por usuario (`Total Lotes`, `Total Archivos`, `Total Páginas`, `Total Alertas`, `Último Procesamiento`) y fila `TOTAL`.
+
+- **Alcance por rol:**
+  - `admin`: todos los usuarios, o los indicados en `user_id` / `user_ids`.
+  - `encargado`: sus propios archivos y los de sus usuarios asignados, o el subconjunto indicado en `user_id` / `user_ids` (si incluye un usuario no asignado devuelve `403 Forbidden`).
+  - `user`: `403 Forbidden`.
+- **Query params opcionales:**
+  - `user_id`: ID de un usuario específico.
+  - `user_ids`: lista CSV de IDs de usuarios seleccionados (ej. `user_ids=2,3,4`).
+  - `from` / `fecha_desde`: fecha inicial (`YYYY-MM-DD` o RFC3339).
+  - `to` / `fecha_hasta`: fecha final (`YYYY-MM-DD` o RFC3339).
+  - `status`: `UPLOADING` | `PENDING` | `RUNNING` | `COMPLETED` | `FAILED`.
+
+```bash
+# Admin: reporte de usuarios seleccionados
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:5000/api/v1/report/excel?user_ids=2,3&from=2026-11-01" \
+  -o reporte_archivos.xlsx
+```
+
+---
+
+### Administración (requiere `role = "admin"`)
+
+- **Usuarios y roles:**
+  - `GET /api/v1/admin/user` *(opcional `?role=admin|encargado|user`)*
+  - `GET /api/v1/admin/user/{user_id}`
+  - `POST /api/v1/admin/user` — body: `{ "username": "...", "password": "...", "role": "encargado", "is_active": true, "assigned_user_ids": [2, 3] }`
+  - `PUT /api/v1/admin/user/{user_id}` — permite actualizar `username`, `password`, `role`, `is_active` y `assigned_user_ids`
+  - `DELETE /api/v1/admin/user/{user_id}`
+- **Asignación de usuarios a encargados:**
+  - `GET /api/v1/admin/encargado/{encargado_id}/users` — lista los usuarios asignados a ese encargado
+  - `PUT /api/v1/admin/encargado/{encargado_id}/users` — reemplaza la lista completa con `{ "user_ids": [2, 3, 4] }`
+  - `POST /api/v1/admin/encargado/{encargado_id}/users/{user_id}` — asigna un usuario al encargado
+  - `DELETE /api/v1/admin/encargado/{encargado_id}/users/{user_id}` — desasigna un usuario del encargado
+- **Tareas globales:** `GET /api/v1/admin/task` *(opcional `?user_id=&status=&order_type=&order_by=`)*, `GET /api/v1/admin/task/{task_id}`, `DELETE /api/v1/admin/task/{task_id}`
 - **Lista blanca de IPs:** `GET /api/v1/admin/allowed_ips`, `GET /api/v1/admin/allowed_ips/{id}`, `POST /api/v1/admin/allowed_ips`, `PUT /api/v1/admin/allowed_ips/{id}`, `DELETE /api/v1/admin/allowed_ips/{id}`
 
 ---

@@ -16,9 +16,14 @@ Diseñada con una arquitectura políglota orientada a eventos (**Go 1.23 + Pytho
 | **`tilde`** (`tilde_v2`) | Detección de inclinación | `640×640` | `inclinado` / `no inclinado` |
 | **`dude`** (`duplicate`) | Detección de páginas duplicadas | pHash + SSIM (`512px`) | Pares `(pagina1, pagina2, similitud)` |
 
-### Modos de ingesta
-- **API REST v1 (Go):** subidas `multipart/form-data` en streaming, autenticación JWT (HS256), control de acceso por IP/CIDR cacheado en memoria, seguimiento de estado en tiempo real y exportación CSV en streaming (`O(1)` en RAM).
+### Modos de ingesta y control de acceso
+- **API REST v1 (Go):** subidas `multipart/form-data` en streaming, autenticación JWT (HS256) con **control de acceso basado en roles (`admin`, `encargado`, `user`)**, control de acceso por IP/CIDR cacheado en memoria, seguimiento de estado en tiempo real, exportación CSV en streaming (`O(1)` en RAM) y **reporte Excel (`.xlsx`)** de archivos procesados y resumen por usuario.
 - **Hot-Folder local integrado:** carpeta vigilada (`hotfolder/inbox/`) activada por archivo trigger (`trigger.txt` o `trigger.json`), con auto-exportación atómica de CSV en `hotfolder/results/` y gestión automática de originales (`move`, `delete`, `keep`).
+
+### Roles y visibilidad
+- **`user`:** solo puede ver, consultar y exportar sus propios procesamientos.
+- **`encargado`:** puede ver, exportar y generar reportes Excel de sus propios procesamientos y los de los usuarios asignados a su cargo (`encargado_users`).
+- **`admin`:** acceso global a todos los archivos/procesamientos, gestión de usuarios/roles, asignación de usuarios a encargados, IPs permitidas y reporte Excel global o por usuarios seleccionados.
 
 ---
 
@@ -32,15 +37,15 @@ flowchart LR
     end
 
     subgraph API["services/api (Go 1.23 · ~13 MB RAM)"]
-        HTTP["REST API v1<br/>JWT · CIDR Cache · /health"]
+        HTTP["REST API v1<br/>JWT · RBAC · CIDR Cache · /health"]
         HF["Hot-Folder Watcher"]
         CONV["Conversor ultrarrápido<br/>pdfimages · mutool · libvips"]
-        EXP["Exportador CSV Streaming"]
+        EXP["Exportador CSV Streaming<br/>& Reporte Excel (.xlsx)"]
     end
 
     TMP[("/shared-data<br/>tmpfs 2 GB en RAM")]
     RMQ[("RabbitMQ 3<br/>queue_worker · queue_dude<br/>+ DLX/DLQ")]
-    PG[("PostgreSQL 16<br/>result · result_status<br/>result_item JSONB")]
+    PG[("PostgreSQL 16<br/>user · encargado_users<br/>result · result_file · result_item")]
 
     subgraph Workers["Microservicios de Procesamiento (Python 3.12)"]
         W["services/worker<br/>4 modelos unificados<br/>Prefetch · ONNX / OpenVINO"]
@@ -146,6 +151,15 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/v1/task/prueba_
 # 4. Descargar CSV en streaming (normal o no_tecnico)
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:5000/api/v1/export/prueba_01?formato=no_tecnico" -o resultado.csv
+
+# 5. Descargar reporte Excel (.xlsx) de archivos procesados (admin o encargado)
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:5000/api/v1/report/excel" -o reporte_archivos.xlsx
+```
+
+### 5. Pruebas automatizadas E2E (RBAC y reporte Excel)
+```bash
+API_BASE_URL=http://localhost:${API_PORT:-5000} python3 test/test_rbac.py
 ```
 
 ---

@@ -106,20 +106,34 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			writeJSONError(w, http.StatusUnauthorized, "User not found")
 			return
 		}
+		if !user.IsActive {
+			writeJSONError(w, http.StatusForbidden, "User account is inactive")
+			return
+		}
 		ctx := context.WithValue(r.Context(), ctxUserKey, user)
 		next(w, r.WithContext(ctx))
 	}
 }
 
 func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
-		user := currentUser(r)
-		if user == nil || !user.IsAdmin {
-			writeJSONError(w, http.StatusForbidden, "Permission denied")
-			return
-		}
-		next(w, r)
-	})
+	return s.requireRoles(db.RoleAdmin)(next)
+}
+
+func (s *Server) requireRoles(allowed ...string) func(http.HandlerFunc) http.HandlerFunc {
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, r := range allowed {
+		allowedSet[r] = true
+	}
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+			user := currentUser(r)
+			if user == nil || !allowedSet[user.EffectiveRole()] {
+				writeJSONError(w, http.StatusForbidden, "Permission denied")
+				return
+			}
+			next(w, r)
+		})
+	}
 }
 
 func currentUser(r *http.Request) *db.User {

@@ -295,15 +295,35 @@ func ingestBatch(ctx context.Context, cfg config.Config, store *db.Store, pub *q
 	staged := make([]ingest.StagedInput, 0, len(sourceFiles))
 	if action == "keep" {
 		for i, src := range sourceFiles {
-			staged = append(staged, ingest.StagedInput{Index: i + 1, Path: src, Filename: filepath.Base(src)})
+			var sz int64
+			if fi, err := os.Stat(src); err == nil {
+				sz = fi.Size()
+			}
+			staged = append(staged, ingest.StagedInput{
+				Index:      i + 1,
+				Path:       src,
+				Filename:   filepath.Base(src),
+				SourcePath: src,
+				SizeBytes:  sz,
+			})
 		}
 	} else {
 		for i, src := range sourceFiles {
+			var sz int64
+			if fi, err := os.Stat(src); err == nil {
+				sz = fi.Size()
+			}
 			dst := filepath.Join(batchProcDir, filepath.Base(src))
 			if err := converter.MoveFileSafe(src, dst); err != nil {
 				continue
 			}
-			staged = append(staged, ingest.StagedInput{Index: i + 1, Path: dst, Filename: filepath.Base(dst)})
+			staged = append(staged, ingest.StagedInput{
+				Index:      i + 1,
+				Path:       dst,
+				Filename:   filepath.Base(dst),
+				SourcePath: src,
+				SizeBytes:  sz,
+			})
 		}
 		if loc.IsSubdir {
 			_ = os.Remove(loc.SourceDir)
@@ -320,7 +340,7 @@ func ingestBatch(ctx context.Context, cfg config.Config, store *db.Store, pub *q
 	}
 
 	start := time.Now()
-	validFiles, totalPages := ingest.FilesStreaming(ctx, cfg, pub, taskID, models, isDuplicate, staged, func(in ingest.StagedInput, fErr error) {
+	validFiles, totalPages, ingestedFiles := ingest.FilesStreaming(ctx, cfg, pub, taskID, models, isDuplicate, staged, func(in ingest.StagedInput, fErr error) {
 		fmt.Printf("[hotfolder] Omitiendo %s: %v\n", in.Filename, fErr)
 		if action != "keep" {
 			moveToFailed(failedRoot, in.Path, taskID, fErr.Error())
@@ -332,6 +352,20 @@ func ingestBatch(ctx context.Context, cfg config.Config, store *db.Store, pub *q
 		_ = os.RemoveAll(filepath.Join(cfg.SharedDataDir, taskID))
 		_ = os.RemoveAll(batchProcDir)
 		return nil
+	}
+
+	if len(ingestedFiles) > 0 {
+		dbFiles := make([]db.ResultFile, 0, len(ingestedFiles))
+		for _, f := range ingestedFiles {
+			dbFiles = append(dbFiles, db.ResultFile{
+				Filename:  f.Filename,
+				FilePath:  f.FilePath,
+				Source:    "hotfolder",
+				Pages:     f.Pages,
+				SizeBytes: f.SizeBytes,
+			})
+		}
+		_ = store.InsertResultFiles(ctx, resultID, taskID, dbFiles)
 	}
 
 	if isDuplicate {
@@ -399,6 +433,7 @@ func finalizeJob(ctx context.Context, cfg config.Config, store *db.Store, job *a
 				}
 			}
 			_ = os.RemoveAll(job.ProcessingDir)
+			_ = store.UpdateResultFilesDir(ctx, job.TaskID, failDest)
 		} else if job.Action == "delete" || job.Action == "keep" {
 			_ = os.RemoveAll(job.ProcessingDir)
 		} else if job.Action == "move" {
@@ -410,6 +445,7 @@ func finalizeJob(ctx context.Context, cfg config.Config, store *db.Store, job *a
 				}
 			}
 			_ = os.RemoveAll(job.ProcessingDir)
+			_ = store.UpdateResultFilesDir(ctx, job.TaskID, destDir)
 		}
 	}
 

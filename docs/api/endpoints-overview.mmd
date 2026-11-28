@@ -5,17 +5,19 @@ graph LR
     B["POST/GET/PUT/DELETE /api/v1/user"]
     C["POST /api/v1/worker"]
     D["POST /api/v1/duplicate"]
-    E["GET /api/v1/task"]
-    F["GET/DELETE /api/v1/task/:task_id"]
-    G["GET /api/v1/export/:task_id"]
-    AD["Admin: /api/v1/admin/{user,task,allowed_ips}"]
+    E["GET /api/v1/task (RBAC)"]
+    F["GET/DELETE /api/v1/task/:task_id (RBAC)"]
+    G["GET /api/v1/export/:task_id (RBAC CSV)"]
+    R["GET /api/v1/report/excel (Admin/Encargado .xlsx)"]
+    ENC["GET /api/v1/encargado/users"]
+    AD["Admin: /api/v1/admin/{user,encargado,task,allowed_ips}"]
     HF["Hot-Folder Watcher (/hotfolder/inbox)"]
   end
 
   TMP[("/shared-data (tmpfs 2GB)")]
   Q1[("RabbitMQ: queue_worker + DLQ")]
   Q2[("RabbitMQ: queue_dude + DLQ")]
-  PG[("PostgreSQL 16: user, allowed_ips, result, result_status, result_item")]
+  PG[("PostgreSQL 16: user, encargado_users, allowed_ips, result, result_status, result_file, result_item")]
 
   C -->|"pdfimages / mutool / vips"| TMP
   D -->|"pdfimages / mutool / vips"| TMP
@@ -25,8 +27,10 @@ graph LR
   D --> Q2
   HF --> Q2
   G -->|"streaming CSV (pgx)"| PG
+  R -->|"Excel .xlsx (excelize)"| PG
   E --> PG
   F --> PG
+  ENC --> PG
   AD --> PG
   H --> PG
   H --> Q1

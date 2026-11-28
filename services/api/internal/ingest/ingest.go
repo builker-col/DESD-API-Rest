@@ -32,9 +32,18 @@ type DuplicateTaskMessage struct {
 }
 
 type StagedInput struct {
-	Index    int
-	Path     string
-	Filename string
+	Index      int
+	Path       string
+	Filename   string
+	SourcePath string
+	SizeBytes  int64
+}
+
+type IngestedFile struct {
+	Filename  string
+	FilePath  string
+	Pages     int
+	SizeBytes int64
 }
 
 var (
@@ -83,7 +92,7 @@ func FilesStreaming(
 	isDuplicate bool,
 	inputs []StagedInput,
 	onFileError func(in StagedInput, err error),
-) (int, int) {
+) (int, int, []IngestedFile) {
 	taskSharedDir := filepath.Join(cfg.SharedDataDir, taskID)
 	_ = os.MkdirAll(taskSharedDir, 0o777)
 
@@ -112,6 +121,8 @@ func FilesStreaming(
 
 	var validFiles int64
 	var totalPages int64
+	var mu sync.Mutex
+	ingested := make([]IngestedFile, 0, len(inputs))
 	var wg sync.WaitGroup
 
 	for w := 0; w < workers; w++ {
@@ -119,7 +130,7 @@ func FilesStreaming(
 		go func() {
 			defer wg.Done()
 			for in := range jobsCh {
-				vc, pages, err := ingestSingle(ctx, cfg, pub, taskID, taskSharedDir, models, isDuplicate, in)
+				vc, pages, recs, err := ingestSingle(ctx, cfg, pub, taskID, taskSharedDir, models, isDuplicate, in)
 				if err != nil {
 					if onFileError != nil {
 						onFileError(in, err)
@@ -130,12 +141,17 @@ func FilesStreaming(
 				}
 				atomic.AddInt64(&validFiles, int64(vc))
 				atomic.AddInt64(&totalPages, int64(pages))
+				if len(recs) > 0 {
+					mu.Lock()
+					ingested = append(ingested, recs...)
+					mu.Unlock()
+				}
 			}
 		}()
 	}
 	wg.Wait()
 
-	return int(atomic.LoadInt64(&validFiles)), int(atomic.LoadInt64(&totalPages))
+	return int(atomic.LoadInt64(&validFiles)), int(atomic.LoadInt64(&totalPages)), ingested
 }
 
 func ingestSingle(
@@ -146,26 +162,31 @@ func ingestSingle(
 	models []string,
 	isDuplicate bool,
 	in StagedInput,
-) (int, int, error) {
+) (int, int, []IngestedFile, error) {
 	lower := strings.ToLower(filepath.Base(in.Filename))
 	ext := strings.TrimPrefix(filepath.Ext(lower), ".")
+	basePath := strings.TrimSpace(in.SourcePath)
+	if basePath == "" {
+		basePath = in.Filename
+	}
 
 	if ext == "zip" {
 		zr, err := zip.OpenReader(in.Path)
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, nil, err
 		}
 		defer zr.Close()
 
 		tmpDir, err := os.MkdirTemp(cfg.SharedDataDir, "__zip_*")
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, nil, err
 		}
 		defer os.RemoveAll(tmpDir)
 
 		vc := 0
 		pages := 0
 		innerIdx := 0
+		var recs []IngestedFile
 		for _, zf := range zr.File {
 			if zf.FileInfo().IsDir() || IsIgnoredFile(filepath.Base(zf.Name)) {
 				continue
@@ -179,36 +200,51 @@ func ingestSingle(
 
 			rc, err := zf.Open()
 			if err != nil {
-				return vc, pages, err
+				return vc, pages, recs, err
 			}
 			extractedPath := filepath.Join(tmpDir, fmt.Sprintf("%d_%s", innerIdx, innerName))
 			outF, err := os.Create(extractedPath)
 			if err != nil {
 				_ = rc.Close()
-				return vc, pages, err
+				return vc, pages, recs, err
 			}
-			_, cpErr := io.Copy(outF, rc)
+			written, cpErr := io.Copy(outF, rc)
 			_ = rc.Close()
 			_ = outF.Close()
 			if cpErr != nil {
-				return vc, pages, cpErr
+				return vc, pages, recs, cpErr
 			}
 
 			c, p, err := convertAndStreamOne(ctx, cfg, pub, in.Index, fmt.Sprintf("%d_%d", in.Index, innerIdx), extractedPath, innerName, innerExt, taskID, taskSharedDir, models, isDuplicate)
 			_ = os.Remove(extractedPath)
 			if err != nil {
-				return vc, pages, err
+				return vc, pages, recs, err
 			}
 			vc += c
 			pages += p
+			recs = append(recs, IngestedFile{
+				Filename:  innerName,
+				FilePath:  basePath + "/" + zf.Name,
+				Pages:     p,
+				SizeBytes: written,
+			})
 		}
 		if vc == 0 {
-			return 0, 0, fmt.Errorf("ZIP sin archivos soportados: %s", in.Filename)
+			return 0, 0, nil, fmt.Errorf("ZIP sin archivos soportados: %s", in.Filename)
 		}
-		return vc, pages, nil
+		return vc, pages, recs, nil
 	}
 
-	return convertAndStreamOne(ctx, cfg, pub, in.Index, strconv.Itoa(in.Index), in.Path, lower, ext, taskID, taskSharedDir, models, isDuplicate)
+	vc, pages, err := convertAndStreamOne(ctx, cfg, pub, in.Index, strconv.Itoa(in.Index), in.Path, lower, ext, taskID, taskSharedDir, models, isDuplicate)
+	if err != nil {
+		return 0, pages, nil, err
+	}
+	return vc, pages, []IngestedFile{{
+		Filename:  lower,
+		FilePath:  basePath,
+		Pages:     pages,
+		SizeBytes: in.SizeBytes,
+	}}, nil
 }
 
 func convertAndStreamOne(

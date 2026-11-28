@@ -10,7 +10,7 @@ El sistema consta de **5 contenedores** coordinados por Docker Compose:
 
 | Servicio | Tecnología | Rol | Estado / Escalado |
 |---|---|---|---|
-| `api` | **Go 1.23** (`net/http`, `pgx/v5`, `amqp091-go`) | API REST v1, Auth JWT, CIDR allowlist, Hot-Folder local, conversión de documentos y exportación CSV en streaming | Stateless HTTP + watcher singleton (`HOTFOLDER_ENABLED`) |
+| `api` | **Go 1.23** (`net/http`, `pgx/v5`, `amqp091-go`, `excelize/v2`) | API REST v1, Auth JWT + RBAC (`admin`, `encargado`, `user`), CIDR allowlist, Hot-Folder local, conversión de documentos, exportación CSV en streaming y reporte Excel (`.xlsx`) | Stateless HTTP + watcher singleton (`HOTFOLDER_ENABLED`) |
 | `worker` | **Python 3.12** (`onnxruntime`, `openvino`, `opencv`, `SQLAlchemy`) | Inferencia paralela de los 4 modelos (`cude`, `rode`, `legibility`, `tilde`) con prefetch de 3 etapas | Escalable horizontalmente (`--scale worker=N`) |
 | `duplicate` | **Python 3.12** (`imagehash`, `scikit-image`, `opencv`, `SQLAlchemy`) | Detección de páginas duplicadas (pHash paralelo + SSIM `512px`) | Escalable horizontalmente (`--scale duplicate=N`) |
 | `postgres` | **PostgreSQL 16** | Fuente única de verdad: usuarios, IPs, tareas, estados atómicos y resultados (`JSONB`) | Volumen persistente `postgres-data` |
@@ -84,17 +84,27 @@ Para soportar streaming real (el worker puede terminar antes o después de que l
 ```mermaid
 erDiagram
     USER ||--o{ RESULT : owns
+    USER ||--o{ ENCARGADO_USERS : supervises
+    USER ||--o{ ENCARGADO_USERS : assigned_to
     RESULT ||--|| RESULT_STATUS : tracks
+    RESULT ||--o{ RESULT_FILE : registers
     RESULT ||--o{ RESULT_ITEM : contains
 
     USER {
         int id PK
         varchar username UK
         varchar password "bcrypt hash"
+        varchar role "admin|encargado|user"
         boolean is_admin
         boolean is_active
         timestamp created_at
         timestamp updated_at
+    }
+
+    ENCARGADO_USERS {
+        int encargado_id PK,FK "ON DELETE CASCADE"
+        int user_id PK,FK "ON DELETE CASCADE"
+        timestamp created_at
     }
 
     ALLOWED_IPS {
@@ -124,6 +134,18 @@ erDiagram
         varchar models
         varchar current_file
         timestamp last_updated
+    }
+
+    RESULT_FILE {
+        int id PK
+        int result_id FK "ON DELETE CASCADE"
+        varchar task_id "indexado"
+        varchar filename
+        text file_path "ruta origen o destino"
+        varchar source "api|hotfolder"
+        int pages
+        bigint size_bytes
+        timestamp created_at
     }
 
     RESULT_ITEM {

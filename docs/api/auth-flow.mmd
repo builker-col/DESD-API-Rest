@@ -11,14 +11,14 @@ sequenceDiagram
     PG-->>CACHE: Lista IPs / CIDR
   end
   API->>PG: SELECT * FROM "user" WHERE username = $1
-  PG-->>API: User (hash bcrypt)
-  API->>API: bcrypt.CompareHashAndPassword
+  PG-->>API: User (hash bcrypt, role, is_active)
+  API->>API: bcrypt.CompareHashAndPassword + verifica is_active
   API->>API: Firma JWT HS256 (sub=user.id, exp=24h)
-  API-->>C: 200 {access_token}
+  API-->>C: 200 {access_token, role, user}
 
-  C->>API: GET /api/v1/task (Authorization: Bearer JWT)
+  C->>API: GET /api/v1/task o GET /api/v1/report/excel (Bearer JWT)
   API->>CACHE: IsIPAllowed(client_ip)
-  API->>API: Valida firma HS256 y expiración
-  API->>PG: SELECT user + tasks WHERE user_id = sub
-  PG-->>API: Registros
-  API-->>C: 200 {total_results, results}
+  API->>API: Valida firma HS256, expiración y is_active
+  API->>PG: Resuelve alcance por rol (admin: todos | encargado: propios + encargado_users | user: propios)
+  PG-->>API: Registros filtrados por alcance
+  API-->>C: 200 JSON / Excel .xlsx (o 403 si excede alcance)

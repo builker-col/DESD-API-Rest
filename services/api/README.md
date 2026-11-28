@@ -2,10 +2,10 @@
 
 Binario estático compilado en **Go 1.23** (`CGO_ENABLED=0`) que concentra en un solo servicio ligero (~13 MiB de RAM en operación):
 
-1. **API REST v1** (`net/http` + JWT HS256 + `bcrypt` + caché CIDR de `allowed_ips`).
+1. **API REST v1** (`net/http` + JWT HS256 + RBAC `admin`/`encargado`/`user` + `bcrypt` + caché CIDR de `allowed_ips`).
 2. **Motor de conversión ultrarrápido** (`pdfimages -j`, `mutool draw` paralelo por bloques a `960px`, `libvips` SIMD para Multi-TIFF e imágenes grandes).
-3. **Ingesta en streaming** hacia `/shared-data` (`tmpfs`) y RabbitMQ (`queue_worker` / `queue_dude` con DLQ).
-4. **Exportación CSV en streaming** directo desde cursor `pgx` de PostgreSQL (`O(1)` en memoria).
+3. **Ingesta en streaming** hacia `/shared-data` (`tmpfs`), registro de metadatos de archivo en `result_file` y publicación a RabbitMQ (`queue_worker` / `queue_dude` con DLQ).
+4. **Exportación CSV en streaming** directo desde cursor `pgx` de PostgreSQL (`O(1)` en memoria) y **reporte Excel (`.xlsx`)** con `excelize/v2` (detalle de archivos procesados + resumen por usuario).
 5. **Hot-Folder Watcher integrado** (opcional vía `HOTFOLDER_ENABLED=true`).
 
 ---
